@@ -4,6 +4,10 @@ Merge your podcasts into **one RSS feed**, or several: an "everything" feed, a "
 
 Self-hosted: one small Docker container with a web UI for managing your shows.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Refeed web UI: four merged feeds with generated cover art, and the show list with one-click buttons to put each show in or out of a feed" width="600">
+</p>
+
 ## Why
 
 Podcast apps lock your subscriptions inside the app. A single merged feed works in *any* app, on any device, and you only manage the list in one place. It's also handy for players that only take one feed, like smart speakers, car systems or simple RSS readers.
