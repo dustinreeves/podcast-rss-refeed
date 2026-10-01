@@ -645,3 +645,26 @@ def test_render_layouts(tmp_path, n):
     title = "A Very Long Collection Name That Will Not Fit On One Line At All, Really"
     img = cover.render(title, files)
     assert img.size == (1400, 1400) and img.mode == "RGB"
+
+
+@pytest.mark.parametrize(
+    "headers, allowed",
+    [
+        # Browser behind "Referrer-Policy: no-referrer": Origin is "null".
+        ({"Origin": "null", "Sec-Fetch-Site": "same-origin"}, True),
+        ({"Origin": "null"}, True),
+        ({"Sec-Fetch-Site": "same-origin"}, True),
+        ({"Origin": "http://testserver"}, True),
+        ({"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"}, False),
+        ({"Sec-Fetch-Site": "same-site"}, False),  # another subdomain
+        ({"Sec-Fetch-Site": "cross-site", "Origin": "null"}, False),
+        ({"Origin": "https://evil.example"}, False),
+    ],
+)
+def test_form_post_origin_checks(app_main, headers, allowed):
+    with TestClient(app_main.app) as c:
+        resp = c.post(
+            "/login", data={"username": "admin", "password": PASSWORD}, headers=headers,
+            follow_redirects=False,
+        )
+        assert (resp.status_code == 303) is allowed, resp.text
