@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Create your account · Refeed{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  {% if invalid %}
+    <h2>This invite link doesn't work</h2>
+    <p class="muted">It may have been used already or expired. Ask for a new one.</p>
+    <p><a href="/login">Sign in</a> if you already have an account.</p>
+  {% elif reset_for %}
+    <h2>Set a new password for {{ reset_for }}</h2>
+    <form method="post" action="/signup" class="settings">
+      <input type="hidden" name="invite" value="{{ invite }}">
+      <input type="text" name="username" value="{{ reset_for }}" autocomplete="username" hidden>
+      <label>New password (at least 8 characters) <input name="password" type="password" autocomplete="new-password" minlength="8" required autofocus></label>
+      <label>New password again <input name="confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+      <button type="submit" class="primary">Set password</button>
+    </form>
+  {% else %}
+    <h2>Create your account</h2>
+    <p class="muted">You've been invited to Refeed: merge the podcasts you follow into feeds you can subscribe to in any podcast app. Your shows and feeds are private to you.</p>
+    <form method="post" action="/signup" class="settings">
+      <input type="hidden" name="invite" value="{{ invite }}">
+      <label>Username <input name="username" value="{{ username or '' }}" autocomplete="username" pattern="[A-Za-z0-9_.\-]{3,32}" title="3–32 letters, numbers, dots, dashes or underscores" required autofocus></label>
+      <label>Password (at least 8 characters) <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Password again <input name="confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+      <button type="submit" class="primary">Create account</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -22,9 +22,7 @@ def _sub(parent, tag, text=None, **attrs):
 
 def build_feed(collection, self_url: str, cover_url: str) -> bytes:
     """cover_url is the generated collage, used unless the feed has its own image."""
-    episodes = db.merged_episodes(
-        collection, default_max=int(db.get_settings()["default_max_episodes"])
-    )
+    episodes = db.merged_episodes(collection)
     prefix = bool(collection["prefix_titles"])
 
     rss = ET.Element("rss", {"version": "2.0"})

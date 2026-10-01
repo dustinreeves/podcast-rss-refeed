@@ -14,6 +14,7 @@ Podcast apps lock your subscriptions inside the app. A single merged feed works 
 
 ## Features
 
+- **Accounts for family and friends**: invite people with a one-time link. Everyone gets their own private library of shows and their own feeds; nobody sees anyone else's (handy when each person has their own Patreon feeds).
 - **Multiple merged feeds**: put each show in as many feeds as you like with one click, or let a feed include every show automatically.
 - **Automatic cover art**: each merged feed gets a collage of its shows' artwork with the feed's name in large type, designed to stay readable at podcast-app thumbnail size. It updates itself when shows change, or set your own image instead.
 - **Web UI**: add shows by URL, import the OPML export from your current podcast app (straight into a feed), export OPML back out, per show or per feed.
@@ -35,11 +36,19 @@ curl -fsSL https://raw.githubusercontent.com/dustinreeves/podcast-rss-refeed/mai
 docker compose up -d
 ```
 
-Open http://localhost:8080 and sign in as `admin` with your password. Add some shows or import your OPML, then subscribe to a link under **Your merged feeds** in your podcast app.
+Open http://localhost:8080 and sign in as `admin` with the password from `.env` (that account is created the first time the container starts). Add some shows or import your OPML, then subscribe to a link under **Your merged feeds** in your podcast app.
+
+If you leave `ADMIN_PASSWORD` empty, the container instead logs a one-time link for creating the admin account in your browser: `docker compose logs refeed`.
 
 You start with one feed that includes every show. To split things up, create more feeds (say "Comedy" and "History"), then click a feed's name on each show to put it in or take it out. A show can be in any number of feeds.
 
 To build from source instead, clone the repo and run `docker compose up -d --build`.
+
+### Sharing with family and friends
+
+Open **Admin**, click **Create invite link** and send the link. The person picks a username and password and gets their own empty library and feeds. Each invite works once and expires after 7 days. If someone forgets their password, **Reset link** next to their account makes a one-time link for setting a new one, and their shows and feeds stay as they are.
+
+Each person's shows and feeds are private to them. Shows are fetched separately per person, even when two people follow the same podcast.
 
 ### Reaching it from your phone
 
@@ -61,8 +70,8 @@ Environment variables (see [`.env.example`](.env.example)):
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ADMIN_USER` | `admin` | Web UI username |
-| `ADMIN_PASSWORD` | *(empty)* | Web UI password. If empty, the UI is open to anyone who can reach it. |
+| `ADMIN_USER` | `admin` | Username of the first (admin) account |
+| `ADMIN_PASSWORD` | *(empty)* | Password for that account, used only to create it on first start; change it later under **Account**. If empty, a one-time setup link is logged instead. |
 | `BASE_URL` | request host | Public address, e.g. `https://refeed.example.com`, used to build the feed link |
 | `REFRESH_MINUTES` | `30` | How often every show is checked for new episodes |
 | `FETCH_PROXY` | *(empty)* | HTTP proxy for feeds marked "Fetch through proxy", e.g. `http://gluetun:8888` |
@@ -110,7 +119,7 @@ You can also keep an OPML export from the web UI as a lightweight backup of your
 ## Security notes
 
 - Anyone with a merged feed link can listen to everything in that feed, including paid shows. Treat it like a password. **New link** in the UI makes the old one stop working. The generated cover is served at a URL with the same secret.
-- The web UI uses HTTP Basic auth, so only expose it over HTTPS.
+- Sign-ins use a session cookie (HttpOnly, SameSite) and passwords are stored as scrypt hashes. Only expose the web UI over HTTPS. Repeated wrong passwords from one address are blocked for 15 minutes.
 - Audio is not proxied or re-hosted. Podcast apps download episodes straight from each show's host, as they normally would, so the shows still see their downloads.
 - This is for your own listening. Please don't use it to republish other people's podcasts, and never share a merged feed that contains paid content.
 
@@ -127,7 +136,8 @@ The app is FastAPI with Jinja templates and SQLite, in [`app/`](app):
 
 | File | What it does |
 | --- | --- |
-| `main.py` | Routes: web UI, merged feed endpoint, auth |
+| `main.py` | Routes: web UI, accounts and admin, merged feed endpoints |
+| `auth.py` | Password hashing, sessions, login throttling |
 | `fetcher.py` | Fetches and parses source feeds on a schedule |
 | `builder.py` | Builds the merged RSS XML |
 | `cover.py` | Generates cover art collages with Pillow |

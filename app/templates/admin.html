@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Admin · Refeed{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Invite someone</h2>
+  <p class="muted">Send them a link to create their own account. Each link works once and expires after {{ invite_days }} days. Their shows and feeds are private to them.</p>
+  {% if new_invite %}
+    <div class="row">
+      <input id="invite-url" class="grow mono" value="{{ new_invite }}" readonly onclick="this.select()" aria-label="Invite link">
+      <button type="button" data-copy="invite-url">Copy</button>
+    </div>
+    <p class="small muted">Copy it now: it won't be shown again.</p>
+  {% endif %}
+  <form method="post" action="/admin/invites" class="row">
+    <button type="submit" class="primary">Create invite link</button>
+  </form>
+  {% if invites %}
+    <h3 class="small muted">Unused invites</h3>
+    <ul class="plain">
+      {% for i in invites %}
+      <li class="row tight">
+        <span class="grow small">{% if i.for_username %}Password reset for {{ i.for_username }} · {% endif %}Created <time data-ts="{{ i.created_at }}"></time>{% if i.created_by_name %} by {{ i.created_by_name }}{% endif %} · expires <time data-ts="{{ i.expires_at }}"></time></span>
+        <form method="post" action="/admin/invites/{{ i.id }}/revoke"><button type="submit" class="small-btn danger">Revoke</button></form>
+      </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Accounts</h2>
+  <ul class="plain users">
+    {% for u in users %}
+    <li class="row tight user-row">
+      <div class="grow">
+        <strong>{{ u.username }}</strong>
+        {% if u.is_admin %}<span class="tag">admin</span>{% endif %}
+        {% if u.id == user.id %}<span class="tag">you</span>{% endif %}
+        <div class="muted small">{{ u.show_count }} shows · {{ u.collection_count }} feeds · joined <time data-ts="{{ u.created_at }}"></time></div>
+      </div>
+      {% if u.id != user.id %}
+        <form method="post" action="/admin/users/{{ u.id }}/reset"><button type="submit" class="small-btn">Reset link</button></form>
+        <form method="post" action="/admin/users/{{ u.id }}/admin">
+          {% if not u.is_admin %}<input type="hidden" name="make_admin" value="1">{% endif %}
+          <button type="submit" class="small-btn">{{ "Remove admin" if u.is_admin else "Make admin" }}</button>
+        </form>
+        <form method="post" action="/admin/users/{{ u.id }}/delete" onsubmit="return confirm('Delete this account and all of its shows and feeds? Their feed links stop working.')">
+          <button type="submit" class="small-btn danger">Delete</button>
+        </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if new_reset %}
+    <p class="small">Password reset link for <strong>{{ reset_name }}</strong> (works once, for 24 hours; shown only now):</p>
+    <div class="row">
+      <input id="reset-url" class="grow mono" value="{{ new_reset }}" readonly onclick="this.select()" aria-label="Password reset link">
+      <button type="button" data-copy="reset-url">Copy</button>
+    </div>
+  {% endif %}
+  <p class="muted small">Forgotten password? Create a reset link and send it to them. Their shows and feeds stay as they are.</p>
+</section>
+<p><a href="/">← Back to your feeds</a></p>
+{% endblock %}
