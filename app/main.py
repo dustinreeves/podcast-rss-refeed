@@ -19,8 +19,6 @@ from .auth import admin_user, current_user
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("refeed")
-# httpx logs every request URL at INFO, and private feed URLs carry access tokens.
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
