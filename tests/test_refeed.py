@@ -748,3 +748,37 @@ def test_http_get_with_real_curl(local_server, monkeypatch):
 
     asyncio.run(run())
     assert argv and not any("SECRET" in str(a) for a in argv)  # URLs go via stdin
+
+
+def test_single_add_form_url_file_or_both(client):
+    client.post("/collections", data={"title": "Comedy"})
+    comedy = client.db.list_collections(client.uid)[1]
+    opml = f"""<?xml version="1.0"?><opml version="2.0"><body>
+      <outline type="rss" text="B" xmlUrl="{B}"/></body></opml>""".encode()
+
+    assert "Paste a feed URL or choose" in client.post("/feeds", data={"url": ""}).text
+
+    # URL and file in one submit, one set of feed checkboxes and proxy option for both.
+    resp = client.post(
+        "/feeds",
+        data={"url": A, "collections": [comedy["id"]], "use_proxy": "on"},
+        files={"file": ("subs.opml", opml)},
+    )
+    assert "Show added." in resp.text and "Imported 1 new shows" in resp.text
+    assert {f["url"] for f in client.db.collection_feeds(comedy)} == {A, B}
+    assert all(f["use_proxy"] for f in client.db.list_feeds(client.uid))
+
+    # File only, with an empty file input alongside (what browsers send).
+    resp = client.post("/feeds", data={"url": ""}, files={"file": ("subs.opml", opml)})
+    assert "Imported 0 new shows (1 already present)" in resp.text
+
+
+def test_add_url_with_empty_file_field(client):
+    # Browsers send the file input even when nothing was chosen: empty name, no bytes.
+    resp = client.post(
+        "/feeds",
+        data={"url": A},
+        files={"file": ("", b"", "application/octet-stream")},
+    )
+    assert resp.status_code == 200 and "Show added." in resp.text
+    assert "Couldn't read" not in resp.text

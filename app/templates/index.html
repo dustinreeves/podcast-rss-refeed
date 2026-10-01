@@ -59,10 +59,14 @@
   {# ------------------------------------------------------------ add shows #}
   <section class="card">
     <h2>Add shows</h2>
-    <form method="post" action="/feeds">
+    <form method="post" action="/feeds" enctype="multipart/form-data">
       <div class="row">
-        <input class="grow" type="url" name="url" placeholder="https://example.com/podcast.rss" required aria-label="Show's RSS feed URL">
-        <button type="submit" class="primary">Add show</button>
+        <input class="grow" type="url" name="url" placeholder="https://example.com/podcast.rss" aria-label="Show's RSS feed URL">
+      </div>
+      <div class="row">
+        <label class="muted small grow">Or import an OPML export from your podcast app:
+          <input type="file" name="file" accept=".opml,.xml,text/xml,text/x-opml">
+        </label>
       </div>
       <div class="row small">
         {% if picked_collections %}
@@ -71,26 +75,16 @@
             <label class="check"><input type="checkbox" name="collections" value="{{ c.id }}"> {{ c.title }}</label>
           {% endfor %}
         {% endif %}
-        {% if proxy_available %}
-          <label class="check"><input type="checkbox" name="use_proxy"> Fetch through proxy</label>
-        {% endif %}
       </div>
-    </form>
-    <form method="post" action="/feeds/import" enctype="multipart/form-data" class="import">
-      <div class="row">
-        <label class="muted grow">Or import an OPML export from your podcast app:
-          <input type="file" name="file" accept=".opml,.xml,text/xml,text/x-opml" required>
-        </label>
-        <button type="submit">Import</button>
-      </div>
-      {% if picked_collections %}
+      {% if proxy_available %}
       <div class="row small">
-        <span class="muted">Add them to:</span>
-        {% for c in picked_collections %}
-          <label class="check"><input type="checkbox" name="collections" value="{{ c.id }}"> {{ c.title }}</label>
-        {% endfor %}
+        <label class="check"><input type="checkbox" name="use_proxy"> Fetch through proxy</label>
+        <span class="muted">for hosts that block this server, like Patreon</span>
       </div>
       {% endif %}
+      <div class="row">
+        <button type="submit" class="primary">Add</button>
+      </div>
     </form>
   </section>
 
