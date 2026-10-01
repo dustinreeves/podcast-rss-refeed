@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Refeed{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Sign in</h2>
+  <form method="post" action="/login" class="settings">
+    <label>Username <input name="username" value="{{ username or '' }}" autocomplete="username" required autofocus></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+  <p class="muted small">No account? Ask whoever runs this server for an invite link.</p>
+</section>
+{% endblock %}

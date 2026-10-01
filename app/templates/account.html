@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Account · Refeed{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Change password</h2>
+  <form method="post" action="/account/password" class="settings">
+    <input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>
+    <label>Current password <input name="current" type="password" autocomplete="current-password" required></label>
+    <label>New password (at least 8 characters) <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+    <label>New password again <input name="confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+    <button type="submit" class="primary">Change password</button>
+  </form>
+  <p class="muted small">Changing your password signs you out on every other device.</p>
+</section>
+<p><a href="/">← Back to your feeds</a></p>
+{% endblock %}

@@ -143,11 +143,12 @@ async def refresh_one(feed_id: int) -> str | None:
 _refresh_lock = asyncio.Lock()
 
 
-async def refresh_all():
+async def refresh_all(user_id: int | None = None):
+    """Refresh every enabled show, or just one user's."""
     if _refresh_lock.locked():
         return  # a refresh is already running
     async with _refresh_lock:
-        feeds = [f for f in db.list_feeds() if f["enabled"]]
+        feeds = [f for f in db.all_feeds(user_id) if f["enabled"]]
         sem = asyncio.Semaphore(CONCURRENCY)
 
         async def run(clients, feed):

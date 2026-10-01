@@ -1,24 +1,6 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex">
-  <title>Refeed</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-<main>
-  <header class="top">
-    <h1>Refeed</h1>
-    <p class="muted">{{ feeds|length }} shows · {{ collections|length }} merged feed{{ "s" if collections|length != 1 }}</p>
-  </header>
-
-  {% if msg %}<div class="flash" role="status">{{ msg }}</div>{% endif %}
-  {% if not auth_enabled %}
-    <div class="flash warn">ADMIN_PASSWORD isn't set, so anyone who can reach this page can change it.</div>
-  {% endif %}
-
+{% extends "base.html" %}
+{% block subtitle %}<p class="muted">{{ feeds|length }} shows · {{ collections|length }} merged feed{{ "s" if collections|length != 1 }}</p>{% endblock %}
+{% block content %}
   {# ------------------------------------------------------------ merged feeds #}
   <section class="card">
     <h2>Your merged feeds</h2>
@@ -161,7 +143,7 @@
             <summary class="small">Edit</summary>
             <form method="post" action="/feeds/{{ f.id }}/update" class="edit">
               <label>Name <input name="title_override" value="{{ f.title_override or '' }}" placeholder="{{ f.title or '' }}"></label>
-              <label>Max episodes (blank = default, 0 = no limit) <input name="max_episodes" inputmode="numeric" value="{{ '' if f.max_episodes is none else f.max_episodes }}" placeholder="{{ settings.default_max_episodes }}"></label>
+              <label>Max episodes (blank = default, 0 = no limit) <input name="max_episodes" inputmode="numeric" value="{{ '' if f.max_episodes is none else f.max_episodes }}" placeholder="{{ user.default_max_episodes }}"></label>
               <label class="check"><input type="checkbox" name="enabled" {% if f.enabled %}checked{% endif %}> Include in feeds</label>
               {% if proxy_available or f.use_proxy %}
                 <label class="check"><input type="checkbox" name="use_proxy" {% if f.use_proxy %}checked{% endif %}> Fetch through proxy</label>
@@ -208,29 +190,8 @@
   <section class="card">
     <h2>Settings</h2>
     <form method="post" action="/settings" class="settings">
-      <label>Episodes per show, unless a show sets its own (0 = no limit) <input name="default_max_episodes" type="number" min="0" value="{{ settings.default_max_episodes }}"></label>
+      <label>Episodes per show, unless a show sets its own (0 = no limit) <input name="default_max_episodes" type="number" min="0" value="{{ user.default_max_episodes }}"></label>
       <button type="submit" class="primary">Save settings</button>
     </form>
   </section>
-</main>
-<script>
-  const fmt = new Intl.RelativeTimeFormat(undefined, {numeric: "auto"});
-  const units = [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]];
-  for (const el of document.querySelectorAll("time[data-ts]")) {
-    const ts = parseFloat(el.dataset.ts) * 1000, diff = (ts - Date.now()) / 1000;
-    const [unit, secs] = units.find(([, s]) => Math.abs(diff) >= s) || ["minute", 60];
-    el.textContent = fmt.format(Math.round(diff / secs), unit);
-    el.title = new Date(ts).toLocaleString();
-  }
-  for (const btn of document.querySelectorAll("[data-copy]")) {
-    btn.addEventListener("click", () => {
-      navigator.clipboard.writeText(document.getElementById(btn.dataset.copy).value).then(() => {
-        btn.textContent = "Copied";
-        setTimeout(() => (btn.textContent = "Copy"), 1500);
-      });
-    });
-  }
-  if (location.search.includes("msg=")) history.replaceState(null, "", "/" + location.hash);
-</script>
-</body>
-</html>
+{% endblock %}
