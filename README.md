@@ -1,6 +1,6 @@
 # podcast-rss-refeed
 
-Merge all your podcasts into **one RSS feed**. Subscribe to a single link in any podcast app and every show you follow, public or private (Patreon, Supercast, ...), shows up in it, newest first.
+Merge your podcasts into **one RSS feed**, or several: an "everything" feed, a "Comedy" feed, a "History" feed. Subscribe to a single link in any podcast app and every show you put in it, public or private (Patreon, Supercast, ...), shows up there, newest first.
 
 Self-hosted: one small Docker container with a web UI for managing your shows.
 
@@ -10,10 +10,12 @@ Podcast apps lock your subscriptions inside the app. A single merged feed works 
 
 ## Features
 
-- **Web UI**: add feeds by URL, import the OPML export from your current podcast app, export OPML back out.
+- **Multiple merged feeds**: put each show in as many feeds as you like with one click, or let a feed include every show automatically.
+- **Automatic cover art**: each merged feed gets a collage of its shows' artwork with the feed's name in large type, designed to stay readable at podcast-app thumbnail size. It updates itself when shows change, or set your own image instead.
+- **Web UI**: add shows by URL, import the OPML export from your current podcast app (straight into a feed), export OPML back out, per show or per feed.
 - **Works in any podcast app**: episodes keep their original audio links and GUIDs, each episode carries its own show's artwork, and titles can be prefixed with the show name (`[Show] Episode`).
 - **Per-show control**: cap how many episodes each show contributes, rename shows, pause them.
-- **Private feeds stay private**: the merged feed lives at an unguessable URL that you can rotate at any time, it's marked `itunes:block` and `noindex`, and source feed URLs (which often contain access tokens) are never logged.
+- **Private feeds stay private**: each merged feed lives at its own unguessable URL that you can rotate at any time, it's marked `itunes:block` and `noindex`, and source feed URLs (which often contain access tokens) are never logged.
 - **Optional proxy per feed**: send specific feeds through an HTTP proxy, for example a VPN container. Useful for hosts like Patreon that block many datacenter IP addresses.
 - **Polite fetching**: conditional requests (ETag / Last-Modified) on a schedule; everything is stored in SQLite.
 
@@ -29,7 +31,9 @@ curl -fsSL https://raw.githubusercontent.com/dustinreeves/podcast-rss-refeed/mai
 docker compose up -d
 ```
 
-Open http://localhost:8080 and sign in as `admin` with your password. Add some shows or import your OPML, then subscribe to the link under **Your merged feed** in your podcast app.
+Open http://localhost:8080 and sign in as `admin` with your password. Add some shows or import your OPML, then subscribe to a link under **Your merged feeds** in your podcast app.
+
+You start with one feed that includes every show. To split things up, create more feeds (say "Comedy" and "History"), then click a feed's name on each show to put it in or take it out. A show can be in any number of feeds.
 
 To build from source instead, clone the repo and run `docker compose up -d --build`.
 
@@ -58,9 +62,10 @@ Environment variables (see [`.env.example`](.env.example)):
 | `BASE_URL` | request host | Public address, e.g. `https://refeed.example.com`, used to build the feed link |
 | `REFRESH_MINUTES` | `30` | How often every show is checked for new episodes |
 | `FETCH_PROXY` | *(empty)* | HTTP proxy for feeds marked "Fetch through proxy", e.g. `http://gluetun:8888` |
-| `DATA_DIR` | `/data` | Where the SQLite database lives (the `refeed-data` volume) |
+| `DATA_DIR` | `/data` | Where the database, cached artwork and covers live (the `refeed-data` volume) |
+| `COVER_FONT` | DejaVu Sans Bold | Path to a `.ttf` font for the generated cover titles |
 
-Feed title, description, cover art, episodes per show and total episodes are set in the web UI.
+Each feed's title, description, cover art and episode limit, plus the default episodes per show, are set in the web UI.
 
 ### Fetching some feeds through a VPN
 
@@ -89,7 +94,7 @@ Only refeed's feed requests use the proxy. Your podcast app still downloads the 
 docker compose pull && docker compose up -d
 ```
 
-Everything (shows, cached episodes, settings and the feed link) is in the `refeed-data` volume. To back it up:
+Everything (shows, cached episodes, feeds and their links, artwork) is in the `refeed-data` volume. To back it up:
 
 ```bash
 docker compose exec refeed python -c "import sqlite3; sqlite3.connect('/data/refeed.db').backup(sqlite3.connect('/data/backup.db'))"
@@ -100,7 +105,7 @@ You can also keep an OPML export from the web UI as a lightweight backup of your
 
 ## Security notes
 
-- Anyone with the merged feed link can listen to everything in it, including paid shows. Treat it like a password. **New link** in the UI makes the old one stop working.
+- Anyone with a merged feed link can listen to everything in that feed, including paid shows. Treat it like a password. **New link** in the UI makes the old one stop working. The generated cover is served at a URL with the same secret.
 - The web UI uses HTTP Basic auth, so only expose it over HTTPS.
 - Audio is not proxied or re-hosted. Podcast apps download episodes straight from each show's host, as they normally would, so the shows still see their downloads.
 - This is for your own listening. Please don't use it to republish other people's podcasts, and never share a merged feed that contains paid content.
@@ -121,6 +126,7 @@ The app is FastAPI with Jinja templates and SQLite, in [`app/`](app):
 | `main.py` | Routes: web UI, merged feed endpoint, auth |
 | `fetcher.py` | Fetches and parses source feeds on a schedule |
 | `builder.py` | Builds the merged RSS XML |
+| `cover.py` | Generates cover art collages with Pillow |
 | `db.py` | SQLite schema and queries |
 | `opml.py` | OPML import and export |
 

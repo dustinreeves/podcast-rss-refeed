@@ -126,3 +126,33 @@ details summary { cursor: pointer; color: var(--muted); margin-top: 4px; }
   .feed { flex-wrap: wrap; }
   .feed-actions { flex-direction: row; width: 100%; padding-left: 68px; }
 }
+
+/* merged feeds (collections) */
+.collections { list-style: none; margin: 12px 0 0; padding: 0; }
+.collection { padding: 14px 0; border-top: 1px solid var(--border); }
+.collection:first-child { border-top: 0; padding-top: 4px; }
+.collection-head { display: flex; gap: 12px; align-items: center; }
+.collection-head img { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; flex: none; background: var(--border); }
+.new-collection { border-top: 1px solid var(--border); padding-top: 14px; }
+.section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.section-head h2 { margin: 0; }
+.row.tight { margin-top: 0; gap: 6px; }
+.import { margin-top: 6px; }
+
+/* show <-> feed membership toggles */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chips form { margin: 0; }
+.chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chip:hover { border-color: var(--muted); color: var(--text); }
+.chip.on { border-style: solid; border-color: var(--accent); background: var(--accent); color: var(--accent-text); }
+.feed:target { scroll-margin-top: 80px; }

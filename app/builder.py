@@ -20,29 +20,28 @@ def _sub(parent, tag, text=None, **attrs):
     return el
 
 
-def build_feed(self_url: str) -> bytes:
-    settings = db.get_settings()
+def build_feed(collection, self_url: str, cover_url: str) -> bytes:
+    """cover_url is the generated collage, used unless the feed has its own image."""
     episodes = db.merged_episodes(
-        default_max=int(settings["default_max_episodes"]),
-        max_items=int(settings["max_items"]),
+        collection, default_max=int(db.get_settings()["default_max_episodes"])
     )
-    prefix = settings["prefix_titles"] == "1"
+    prefix = bool(collection["prefix_titles"])
 
     rss = ET.Element("rss", {"version": "2.0"})
     channel = _sub(rss, "channel")
-    _sub(channel, "title", settings["title"])
-    _sub(channel, "description", settings["description"])
+    _sub(channel, "title", collection["title"])
+    _sub(channel, "description", collection["description"] or collection["title"])
     _sub(channel, "link", self_url)
     _sub(channel, f"{{{ATOM}}}link", href=self_url, rel="self", type="application/rss+xml")
     _sub(channel, "lastBuildDate", formatdate(usegmt=True))
     _sub(channel, f"{{{ITUNES}}}author", "podcast-rss-refeed")
     _sub(channel, f"{{{ITUNES}}}block", "Yes")  # keep directories from listing it
-    if settings["image"]:
-        _sub(channel, f"{{{ITUNES}}}image", href=settings["image"])
-        image = _sub(channel, "image")
-        _sub(image, "url", settings["image"])
-        _sub(image, "title", settings["title"])
-        _sub(image, "link", self_url)
+    image_url = collection["image"] or cover_url
+    _sub(channel, f"{{{ITUNES}}}image", href=image_url)
+    image = _sub(channel, "image")
+    _sub(image, "url", image_url)
+    _sub(image, "title", collection["title"])
+    _sub(image, "link", self_url)
 
     seen_guids = set()
     for ep in episodes:
