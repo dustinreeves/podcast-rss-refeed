@@ -204,7 +204,7 @@ def update_collection(
         title=title.strip() or "Untitled feed",
         description=description.strip(),
         image=image.strip(),
-        max_items=max(1, max_items),
+        max_items=max(0, max_items),  # 0 = no limit
         prefix_titles=1 if prefix_titles else 0,
         all_shows=1 if all_shows else 0,
     )
@@ -323,5 +323,5 @@ def refresh_all():
 
 @app.post("/settings", dependencies=[Depends(require_admin)])
 def save_settings(default_max_episodes: int = Form(25)):
-    db.set_settings({"default_max_episodes": str(max(1, default_max_episodes))})
+    db.set_settings({"default_max_episodes": str(max(0, default_max_episodes))})  # 0 = no limit
     return back("Settings saved.")

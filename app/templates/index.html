@@ -46,7 +46,7 @@
             <label>Title <input name="title" value="{{ c.title }}" required></label>
             <label>Description <input name="description" value="{{ c.description }}"></label>
             <label>Cover art URL <input name="image" type="url" value="{{ c.image }}" placeholder="Leave blank for an automatic collage of the shows"></label>
-            <label>Total episodes in feed <input name="max_items" type="number" min="1" value="{{ c.max_items }}"></label>
+            <label>Total episodes in feed (0 = no limit) <input name="max_items" type="number" min="0" value="{{ c.max_items }}"></label>
             <label class="check"><input type="checkbox" name="all_shows" {% if c.all_shows %}checked{% endif %}> Include every show automatically</label>
             <label class="check"><input type="checkbox" name="prefix_titles" {% if c.prefix_titles %}checked{% endif %}> Put the show name in front of episode titles</label>
             <button type="submit" class="primary">Save</button>
@@ -161,7 +161,7 @@
             <summary class="small">Edit</summary>
             <form method="post" action="/feeds/{{ f.id }}/update" class="edit">
               <label>Name <input name="title_override" value="{{ f.title_override or '' }}" placeholder="{{ f.title or '' }}"></label>
-              <label>Max episodes <input name="max_episodes" inputmode="numeric" value="{{ f.max_episodes or '' }}" placeholder="{{ settings.default_max_episodes }}"></label>
+              <label>Max episodes (blank = default, 0 = no limit) <input name="max_episodes" inputmode="numeric" value="{{ '' if f.max_episodes is none else f.max_episodes }}" placeholder="{{ settings.default_max_episodes }}"></label>
               <label class="check"><input type="checkbox" name="enabled" {% if f.enabled %}checked{% endif %}> Include in feeds</label>
               {% if proxy_available or f.use_proxy %}
                 <label class="check"><input type="checkbox" name="use_proxy" {% if f.use_proxy %}checked{% endif %}> Fetch through proxy</label>
@@ -208,7 +208,7 @@
   <section class="card">
     <h2>Settings</h2>
     <form method="post" action="/settings" class="settings">
-      <label>Episodes per show (unless a show sets its own) <input name="default_max_episodes" type="number" min="1" value="{{ settings.default_max_episodes }}"></label>
+      <label>Episodes per show, unless a show sets its own (0 = no limit) <input name="default_max_episodes" type="number" min="0" value="{{ settings.default_max_episodes }}"></label>
       <button type="submit" class="primary">Save settings</button>
     </form>
   </section>
