@@ -446,42 +446,67 @@ def export_collection_opml(collection_id: int, user=Depends(current_user)):
 # ---- shows (source feeds)
 
 
-@app.post("/feeds")
-async def add_feed(
-    url: str = Form(...),
-    use_proxy: str = Form(""),
-    collections: list[int] = Form([]),
-    user=Depends(current_user),
-):
-    url = url.strip()
+async def _add_url(user, url: str, use_proxy: bool, collections: list[int]) -> str:
     if not url.startswith(("http://", "https://")):
-        return back("Feed URL must start with http:// or https://")
+        return "Feed URL must start with http:// or https://"
     feed_id = db.add_feed(user["id"], url)
     if feed_id is None:
         db.add_feeds_to_collections([db.feed_id_by_url(user["id"], url)], collections)
         extra = " Added it to the feeds you picked." if collections else ""
-        return back("That show is already in your library." + extra)
+        return "That show is already in your library." + extra
     db.add_feeds_to_collections([feed_id], collections)
     if use_proxy:
         db.update_feed(feed_id, use_proxy=1)
     error = await fetcher.refresh_one(feed_id)
-    if error:
-        return back(f"Added, but fetching failed: {error}")
-    return back("Show added.")
+    return f"Added, but fetching failed: {error}" if error else "Show added."
 
 
-@app.post("/feeds/import")
-async def import_opml(
-    file: UploadFile = File(...), collections: list[int] = Form([]), user=Depends(current_user)
-):
+def _import_opml(user, content: bytes, use_proxy: bool, collections: list[int]) -> str:
     try:
-        urls = opml.parse_opml(await file.read())
+        urls = opml.parse_opml(content)
     except Exception:
-        return back("Couldn't read that file - is it an OPML export?")
-    added = sum(1 for url in urls if db.add_feed(user["id"], url) is not None)
+        return "Couldn't read that file - is it an OPML export?"
+    new_ids = [fid for fid in (db.add_feed(user["id"], url) for url in urls) if fid]
+    if use_proxy:
+        for fid in new_ids:
+            db.update_feed(fid, use_proxy=1)
     db.add_feeds_to_collections([db.feed_id_by_url(user["id"], u) for u in urls], collections)
     run_in_background(fetcher.refresh_all(user["id"]))
-    return back(f"Imported {added} new shows ({len(urls) - added} already present). Fetching now...")
+    return f"Imported {len(new_ids)} new shows ({len(urls) - len(new_ids)} already present). Fetching now..."
+
+
+@app.post("/feeds")
+async def add_feeds(
+    request: Request,
+    url: str = Form(""),
+    use_proxy: str = Form(""),
+    collections: list[int] = Form([]),
+    user=Depends(current_user),
+):
+    """One form for both: a feed URL, an OPML file, or both."""
+    url = url.strip()
+    # Read the file from the raw form: with no file chosen, browsers send an empty
+    # part that arrives as "" rather than a file, which a File() parameter rejects.
+    upload = (await request.form()).get("file")
+    content = await upload.read() if hasattr(upload, "read") else b""
+    if not url and not content:
+        return back("Paste a feed URL or choose an OPML file.")
+    messages = []
+    if url:
+        messages.append(await _add_url(user, url, bool(use_proxy), collections))
+    if content:
+        messages.append(_import_opml(user, content, bool(use_proxy), collections))
+    return back(" ".join(messages))
+
+
+@app.post("/feeds/import")  # kept for old forms and scripts; /feeds takes files too
+async def import_opml(
+    file: UploadFile = File(...),
+    use_proxy: str = Form(""),
+    collections: list[int] = Form([]),
+    user=Depends(current_user),
+):
+    return back(_import_opml(user, await file.read(), bool(use_proxy), collections))
 
 
 @app.get("/feeds/export.opml")
