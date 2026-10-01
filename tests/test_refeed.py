@@ -887,3 +887,19 @@ def test_parse_duration(raw, seconds):
     from app import player
 
     assert player.parse_duration(raw) == seconds
+
+
+def test_icons_and_manifest(app_main):
+    import json
+
+    with TestClient(app_main.app) as c:
+        ico = c.get("/favicon.ico")
+        assert ico.status_code == 200 and ico.headers["content-type"] == "image/x-icon"
+        assert Image.open(io.BytesIO(ico.content)).format == "ICO"
+        assert c.get("/apple-touch-icon.png").headers["content-type"] == "image/png"
+        m = c.get("/manifest.webmanifest")
+        assert m.headers["content-type"].startswith("application/manifest+json")
+        for icon in json.loads(m.text)["icons"]:
+            assert c.get(icon["src"]).status_code == 200
+        page = c.get("/login").text  # icons are on every page, signed in or not
+        assert 'rel="icon"' in page and 'rel="manifest"' in page and 'class="logo"' in page

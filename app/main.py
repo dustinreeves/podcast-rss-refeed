@@ -180,6 +180,45 @@ def cover_image(token: str):
     )
 
 
+ICONS = HERE / "static" / "icons"
+
+
+# Browsers and phones ask for these at the site root.
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(ICONS / "favicon.ico", media_type="image/x-icon",
+                        headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+def apple_touch_icon():
+    return FileResponse(ICONS / "apple-touch-icon.png", media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    """Lets phones add Refeed to the home screen, opening straight into the player."""
+    body = {
+        "name": "Refeed",
+        "short_name": "Refeed",
+        "description": "Your podcasts, merged into feeds, with a player.",
+        "start_url": "/listen",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#161514",
+        "theme_color": "#161514",
+        "icons": [
+            {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png",
+             "purpose": "maskable"},
+        ],
+    }
+    return Response(json.dumps(body), media_type="application/manifest+json")
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}

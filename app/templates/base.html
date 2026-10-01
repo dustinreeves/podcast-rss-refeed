@@ -6,12 +6,17 @@
   <meta name="robots" content="noindex">
   <title>{% block title %}Refeed{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css?v={{ css_version }}">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/static/icons/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#161514">
 </head>
 <body>
 <main class="{% block main_class %}{% endblock %}">
   <header class="top">
     <div>
-      <h1><a href="/" class="home">Refeed</a></h1>
+      <h1><a href="/" class="home"><img src="/static/icons/icon-192.png" alt="" class="logo" width="40" height="40">Refeed</a></h1>
       {% block subtitle %}{% endblock %}
     </div>
     {% if user %}
