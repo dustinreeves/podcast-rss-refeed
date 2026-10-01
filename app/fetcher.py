@@ -14,13 +14,14 @@ import os
 import feedparser
 import httpx
 
-from . import db
+from . import cover, db
 
 log = logging.getLogger("refeed.fetcher")
 
 USER_AGENT = "podcast-rss-refeed/1.0 (+https://github.com/dustinreeves/podcast-rss-refeed)"
 CONCURRENCY = 5
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+MAX_ART_BYTES = 20 * 1024 * 1024
 # Optional HTTP proxy (e.g. a VPN container) for feeds that block datacenter IPs.
 FETCH_PROXY = os.environ.get("FETCH_PROXY") or None
 
@@ -62,6 +63,27 @@ def parse_feed(content: bytes) -> tuple[dict, list[dict]]:
     return info, episodes
 
 
+async def update_art(client: httpx.AsyncClient, feed_id: int, image_url: str | None, cached_url: str | None):
+    """Download a show's artwork for cover collages when its URL has changed."""
+    if not image_url or (image_url == cached_url and cover.art_path(feed_id).exists()):
+        return
+    try:
+        async with client.stream("GET", image_url) as resp:
+            if resp.status_code >= 400:
+                raise ValueError(f"HTTP {resp.status_code}")
+            content = b""
+            async for chunk in resp.aiter_bytes():
+                content += chunk
+                if len(content) > MAX_ART_BYTES:
+                    raise ValueError("artwork too large")
+    except (httpx.HTTPError, ValueError) as exc:
+        msg = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+        log.warning("feed %s: artwork download failed: %s", feed_id, msg)
+        return
+    if await asyncio.to_thread(cover.save_show_art, feed_id, content):
+        db.update_feed(feed_id, art_url=image_url)
+
+
 async def refresh_feed(client: httpx.AsyncClient, feed) -> str | None:
     """Fetch one feed and store its episodes. Returns an error message or None."""
     headers = {}
@@ -74,6 +96,7 @@ async def refresh_feed(client: httpx.AsyncClient, feed) -> str | None:
         resp = await client.get(feed["url"], headers=headers)
         if resp.status_code == 304:
             db.update_feed(feed["id"], last_fetched=time.time(), last_error=None)
+            await update_art(client, feed["id"], feed["image"], feed["art_url"])
             return None
         if resp.status_code >= 400:
             raise ValueError(f"HTTP {resp.status_code}")
@@ -95,6 +118,7 @@ async def refresh_feed(client: httpx.AsyncClient, feed) -> str | None:
         last_fetched=time.time(),
         last_error=None,
     )
+    await update_art(client, feed["id"], info["image"] or feed["image"], feed["art_url"])
     log.info("feed %s (%s): %d episodes", feed["id"], info["title"], len(episodes))
     return None
 

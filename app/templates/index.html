@@ -11,7 +11,7 @@
 <main>
   <header class="top">
     <h1>Refeed</h1>
-    <p class="muted">{{ feeds|length }} shows merged into one feed</p>
+    <p class="muted">{{ feeds|length }} shows · {{ collections|length }} merged feed{{ "s" if collections|length != 1 }}</p>
   </header>
 
   {% if msg %}<div class="flash" role="status">{{ msg }}</div>{% endif %}
@@ -19,48 +19,119 @@
     <div class="flash warn">ADMIN_PASSWORD isn't set, so anyone who can reach this page can change it.</div>
   {% endif %}
 
+  {# ------------------------------------------------------------ merged feeds #}
   <section class="card">
-    <h2>Your merged feed</h2>
-    <p class="muted">Subscribe to this link in any podcast app. Anyone with it can listen to every show here, including private ones, so keep it to yourself.</p>
-    <div class="row">
-      <input id="feed-url" class="grow mono" value="{{ feed_url }}" readonly onclick="this.select()">
-      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('feed-url').value).then(()=>{this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
-    </div>
-    <div class="row actions">
-      <form method="post" action="/refresh"><button type="submit">Refresh all now</button></form>
-      <a class="button" href="/feeds/export.opml">Export OPML</a>
-      <form method="post" action="/token/rotate" onsubmit="return confirm('The current link will stop working. Continue?')">
-        <button type="submit" class="danger">New link</button>
-      </form>
-    </div>
-    {% if refreshing %}<p class="muted">Refreshing in the background…</p>{% endif %}
+    <h2>Your merged feeds</h2>
+    <p class="muted">Subscribe to each link in any podcast app. Anyone with a link can listen to every show in that feed, including private ones, so keep them to yourself.</p>
+
+    <ul class="collections">
+      {% for c in collections %}
+      <li class="collection">
+        <div class="collection-head">
+          <img src="{{ cover_urls[c.id] }}" alt="Cover art for {{ c.title }}" loading="lazy" referrerpolicy="no-referrer">
+          <div class="grow">
+            <strong>{{ c.title }}</strong>
+            <div class="muted small">
+              {% if c.all_shows %}Every show ({{ c.show_count }}){% else %}{{ c.show_count }} show{{ "s" if c.show_count != 1 }}{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <input id="feed-url-{{ c.id }}" class="grow mono" value="{{ feed_urls[c.id] }}" readonly onclick="this.select()" aria-label="Feed link for {{ c.title }}">
+          <button type="button" data-copy="feed-url-{{ c.id }}">Copy</button>
+        </div>
+        <details>
+          <summary class="small">Edit feed</summary>
+          <form method="post" action="/collections/{{ c.id }}/update" class="edit">
+            <label>Title <input name="title" value="{{ c.title }}" required></label>
+            <label>Description <input name="description" value="{{ c.description }}"></label>
+            <label>Cover art URL <input name="image" type="url" value="{{ c.image }}" placeholder="Leave blank for an automatic collage of the shows"></label>
+            <label>Total episodes in feed <input name="max_items" type="number" min="1" value="{{ c.max_items }}"></label>
+            <label class="check"><input type="checkbox" name="all_shows" {% if c.all_shows %}checked{% endif %}> Include every show automatically</label>
+            <label class="check"><input type="checkbox" name="prefix_titles" {% if c.prefix_titles %}checked{% endif %}> Put the show name in front of episode titles</label>
+            <button type="submit" class="primary">Save</button>
+          </form>
+          <div class="row">
+            <a class="button small-btn" href="/collections/{{ c.id }}/export.opml">Export OPML</a>
+            <form method="post" action="/collections/{{ c.id }}/rotate" onsubmit="return confirm('The current link for this feed will stop working. Continue?')">
+              <button type="submit" class="small-btn danger">New link</button>
+            </form>
+            {% if collections|length > 1 %}
+            <form method="post" action="/collections/{{ c.id }}/delete" onsubmit="return confirm('Delete this merged feed? Its shows stay in your library.')">
+              <button type="submit" class="small-btn danger">Delete feed</button>
+            </form>
+            {% endif %}
+          </div>
+        </details>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <form method="post" action="/collections" class="row new-collection">
+      <input class="grow" name="title" placeholder="New feed name, e.g. Comedy" required aria-label="New feed name">
+      <label class="check"><input type="checkbox" name="all_shows"> Every show</label>
+      <button type="submit" class="primary">Create feed</button>
+    </form>
   </section>
 
+  {# ------------------------------------------------------------ add shows #}
   <section class="card">
-    <h2>Add podcasts</h2>
-    <form method="post" action="/feeds" class="row">
-      <input class="grow" type="url" name="url" placeholder="https://example.com/podcast.rss" required aria-label="Feed URL">
-      {% if proxy_available %}
-        <label class="check"><input type="checkbox" name="use_proxy"> Use proxy</label>
+    <h2>Add shows</h2>
+    <form method="post" action="/feeds">
+      <div class="row">
+        <input class="grow" type="url" name="url" placeholder="https://example.com/podcast.rss" required aria-label="Show's RSS feed URL">
+        <button type="submit" class="primary">Add show</button>
+      </div>
+      <div class="row small">
+        {% if picked_collections %}
+          <span class="muted">Add to:</span>
+          {% for c in picked_collections %}
+            <label class="check"><input type="checkbox" name="collections" value="{{ c.id }}"> {{ c.title }}</label>
+          {% endfor %}
+        {% endif %}
+        {% if proxy_available %}
+          <label class="check"><input type="checkbox" name="use_proxy"> Fetch through proxy</label>
+        {% endif %}
+      </div>
+    </form>
+    <form method="post" action="/feeds/import" enctype="multipart/form-data" class="import">
+      <div class="row">
+        <label class="muted grow">Or import an OPML export from your podcast app:
+          <input type="file" name="file" accept=".opml,.xml,text/xml,text/x-opml" required>
+        </label>
+        <button type="submit">Import</button>
+      </div>
+      {% if picked_collections %}
+      <div class="row small">
+        <span class="muted">Add them to:</span>
+        {% for c in picked_collections %}
+          <label class="check"><input type="checkbox" name="collections" value="{{ c.id }}"> {{ c.title }}</label>
+        {% endfor %}
+      </div>
       {% endif %}
-      <button type="submit" class="primary">Add feed</button>
-    </form>
-    <form method="post" action="/feeds/import" enctype="multipart/form-data" class="row">
-      <label class="muted grow">Or import an OPML export from your podcast app:
-        <input type="file" name="file" accept=".opml,.xml,text/xml,text/x-opml" required>
-      </label>
-      <button type="submit">Import</button>
     </form>
   </section>
 
+  {# ------------------------------------------------------------ library #}
   <section class="card">
-    <h2>Shows</h2>
+    <div class="section-head">
+      <h2>Shows</h2>
+      <div class="row tight">
+        <form method="post" action="/refresh"><button type="submit" class="small-btn">Refresh all</button></form>
+        <a class="button small-btn" href="/feeds/export.opml">Export all (OPML)</a>
+      </div>
+    </div>
+    {% if refreshing %}<p class="muted small">Refreshing in the background…</p>{% endif %}
+    {% if picked_collections %}
+      <p class="muted small">Click a feed name on a show to add it to or remove it from that feed.</p>
+    {% endif %}
     {% if not feeds %}
       <p class="muted">No shows yet. Add a feed URL or import OPML above.</p>
     {% endif %}
     <ul class="feeds">
       {% for f in feeds %}
-      <li class="feed {% if not f.enabled %}disabled{% endif %}">
+      {% set member_of = memberships.get(f.id, []) %}
+      <li class="feed {% if not f.enabled %}disabled{% endif %}" id="show-{{ f.id }}">
         {% if f.image %}<img src="{{ f.image }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="noimg"></div>{% endif %}
         <div class="feed-body">
           <div class="feed-title">
@@ -74,12 +145,24 @@
             · <span class="host">{{ f.url.split('/')[2] }}</span>
           </div>
           {% if f.last_error %}<div class="error small">Last fetch failed: {{ f.last_error }}</div>{% endif %}
+          {% if picked_collections %}
+          <div class="chips">
+            {% for c in picked_collections %}
+              {% set on = c.id in member_of %}
+              <form method="post" action="/feeds/{{ f.id }}/collections/{{ c.id }}">
+                {% if not on %}<input type="hidden" name="member" value="1">{% endif %}
+                <button type="submit" class="chip {% if on %}on{% endif %}" aria-pressed="{{ 'true' if on else 'false' }}"
+                        title="{{ ('Remove from ' if on else 'Add to ') ~ c.title }}">{{ "✓ " if on }}{{ c.title }}</button>
+              </form>
+            {% endfor %}
+          </div>
+          {% endif %}
           <details>
             <summary class="small">Edit</summary>
             <form method="post" action="/feeds/{{ f.id }}/update" class="edit">
               <label>Name <input name="title_override" value="{{ f.title_override or '' }}" placeholder="{{ f.title or '' }}"></label>
               <label>Max episodes <input name="max_episodes" inputmode="numeric" value="{{ f.max_episodes or '' }}" placeholder="{{ settings.default_max_episodes }}"></label>
-              <label class="check"><input type="checkbox" name="enabled" {% if f.enabled %}checked{% endif %}> Include in feed</label>
+              <label class="check"><input type="checkbox" name="enabled" {% if f.enabled %}checked{% endif %}> Include in feeds</label>
               {% if proxy_available or f.use_proxy %}
                 <label class="check"><input type="checkbox" name="use_proxy" {% if f.use_proxy %}checked{% endif %}> Fetch through proxy</label>
               {% endif %}
@@ -89,16 +172,27 @@
         </div>
         <div class="feed-actions">
           <form method="post" action="/feeds/{{ f.id }}/refresh"><button type="submit" class="small-btn">Refresh</button></form>
-          <form method="post" action="/feeds/{{ f.id }}/delete" onsubmit="return confirm('Remove this show?')"><button type="submit" class="small-btn danger">Remove</button></form>
+          <form method="post" action="/feeds/{{ f.id }}/delete" onsubmit="return confirm('Remove this show from your library and every feed?')"><button type="submit" class="small-btn danger">Remove</button></form>
         </div>
       </li>
       {% endfor %}
     </ul>
   </section>
 
+  {# ------------------------------------------------------------ preview #}
+  {% if preview_collection %}
   <section class="card">
-    <h2>Latest in the feed</h2>
-    {% if not preview %}<p class="muted">Nothing yet.</p>{% endif %}
+    <div class="section-head">
+      <h2>Latest in {{ preview_collection.title }}</h2>
+      {% if collections|length > 1 %}
+      <nav class="row tight small" aria-label="Preview feed">
+        {% for c in collections %}
+          <a href="/?preview={{ c.id }}" class="chip {% if c.id == preview_collection.id %}on{% endif %}">{{ c.title }}</a>
+        {% endfor %}
+      </nav>
+      {% endif %}
+    </div>
+    {% if not preview %}<p class="muted">Nothing in this feed yet.</p>{% endif %}
     <ol class="episodes">
       {% for e in preview %}
       <li>
@@ -109,16 +203,12 @@
       {% endfor %}
     </ol>
   </section>
+  {% endif %}
 
   <section class="card">
     <h2>Settings</h2>
     <form method="post" action="/settings" class="settings">
-      <label>Feed title <input name="title" value="{{ settings.title }}" required></label>
-      <label>Description <input name="description" value="{{ settings.description }}"></label>
-      <label>Cover art URL <input name="image" type="url" value="{{ settings.image }}" placeholder="https://… (square JPG or PNG)"></label>
-      <label>Episodes per show <input name="default_max_episodes" type="number" min="1" value="{{ settings.default_max_episodes }}"></label>
-      <label>Total episodes in feed <input name="max_items" type="number" min="1" value="{{ settings.max_items }}"></label>
-      <label class="check"><input type="checkbox" name="prefix_titles" {% if settings.prefix_titles == "1" %}checked{% endif %}> Put the show name in front of episode titles</label>
+      <label>Episodes per show (unless a show sets its own) <input name="default_max_episodes" type="number" min="1" value="{{ settings.default_max_episodes }}"></label>
       <button type="submit" class="primary">Save settings</button>
     </form>
   </section>
@@ -132,7 +222,15 @@
     el.textContent = fmt.format(Math.round(diff / secs), unit);
     el.title = new Date(ts).toLocaleString();
   }
-  if (location.search.includes("msg=")) history.replaceState(null, "", "/");
+  for (const btn of document.querySelectorAll("[data-copy]")) {
+    btn.addEventListener("click", () => {
+      navigator.clipboard.writeText(document.getElementById(btn.dataset.copy).value).then(() => {
+        btn.textContent = "Copied";
+        setTimeout(() => (btn.textContent = "Copy"), 1500);
+      });
+    });
+  }
+  if (location.search.includes("msg=")) history.replaceState(null, "", "/" + location.hash);
 </script>
 </body>
 </html>
