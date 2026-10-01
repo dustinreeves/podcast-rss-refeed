@@ -1,0 +1,17 @@
+services:
+  refeed:
+    image: ghcr.io/dustinreeves/podcast-rss-refeed:latest
+    # To build from source instead of pulling: docker compose up -d --build
+    build: .
+    container_name: refeed
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - refeed-data:/data
+    ports:
+      # Bound to localhost; put a reverse proxy (Caddy, nginx, Traefik) in front for HTTPS.
+      # Use "8080:8080" instead to reach it directly from other machines on your LAN.
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  refeed-data:

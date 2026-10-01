@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Refeed</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Refeed</h1>
+    <p class="muted">{{ feeds|length }} shows merged into one feed</p>
+  </header>
+
+  {% if msg %}<div class="flash" role="status">{{ msg }}</div>{% endif %}
+  {% if not auth_enabled %}
+    <div class="flash warn">ADMIN_PASSWORD isn't set, so anyone who can reach this page can change it.</div>
+  {% endif %}
+
+  <section class="card">
+    <h2>Your merged feed</h2>
+    <p class="muted">Subscribe to this link in any podcast app. Anyone with it can listen to every show here, including private ones, so keep it to yourself.</p>
+    <div class="row">
+      <input id="feed-url" class="grow mono" value="{{ feed_url }}" readonly onclick="this.select()">
+      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('feed-url').value).then(()=>{this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
+    </div>
+    <div class="row actions">
+      <form method="post" action="/refresh"><button type="submit">Refresh all now</button></form>
+      <a class="button" href="/feeds/export.opml">Export OPML</a>
+      <form method="post" action="/token/rotate" onsubmit="return confirm('The current link will stop working. Continue?')">
+        <button type="submit" class="danger">New link</button>
+      </form>
+    </div>
+    {% if refreshing %}<p class="muted">Refreshing in the background…</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Add podcasts</h2>
+    <form method="post" action="/feeds" class="row">
+      <input class="grow" type="url" name="url" placeholder="https://example.com/podcast.rss" required aria-label="Feed URL">
+      {% if proxy_available %}
+        <label class="check"><input type="checkbox" name="use_proxy"> Use proxy</label>
+      {% endif %}
+      <button type="submit" class="primary">Add feed</button>
+    </form>
+    <form method="post" action="/feeds/import" enctype="multipart/form-data" class="row">
+      <label class="muted grow">Or import an OPML export from your podcast app:
+        <input type="file" name="file" accept=".opml,.xml,text/xml,text/x-opml" required>
+      </label>
+      <button type="submit">Import</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Shows</h2>
+    {% if not feeds %}
+      <p class="muted">No shows yet. Add a feed URL or import OPML above.</p>
+    {% endif %}
+    <ul class="feeds">
+      {% for f in feeds %}
+      <li class="feed {% if not f.enabled %}disabled{% endif %}">
+        {% if f.image %}<img src="{{ f.image }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="noimg"></div>{% endif %}
+        <div class="feed-body">
+          <div class="feed-title">
+            <strong>{{ f.title_override or f.title or "Not fetched yet" }}</strong>
+            {% if f.use_proxy %}<span class="tag">proxy</span>{% endif %}
+            {% if not f.enabled %}<span class="tag">paused</span>{% endif %}
+          </div>
+          <div class="muted small">
+            {{ f.episode_count }} episodes
+            {% if f.last_fetched %}· checked <time data-ts="{{ f.last_fetched }}"></time>{% endif %}
+            · <span class="host">{{ f.url.split('/')[2] }}</span>
+          </div>
+          {% if f.last_error %}<div class="error small">Last fetch failed: {{ f.last_error }}</div>{% endif %}
+          <details>
+            <summary class="small">Edit</summary>
+            <form method="post" action="/feeds/{{ f.id }}/update" class="edit">
+              <label>Name <input name="title_override" value="{{ f.title_override or '' }}" placeholder="{{ f.title or '' }}"></label>
+              <label>Max episodes <input name="max_episodes" inputmode="numeric" value="{{ f.max_episodes or '' }}" placeholder="{{ settings.default_max_episodes }}"></label>
+              <label class="check"><input type="checkbox" name="enabled" {% if f.enabled %}checked{% endif %}> Include in feed</label>
+              {% if proxy_available or f.use_proxy %}
+                <label class="check"><input type="checkbox" name="use_proxy" {% if f.use_proxy %}checked{% endif %}> Fetch through proxy</label>
+              {% endif %}
+              <button type="submit" class="primary">Save</button>
+            </form>
+          </details>
+        </div>
+        <div class="feed-actions">
+          <form method="post" action="/feeds/{{ f.id }}/refresh"><button type="submit" class="small-btn">Refresh</button></form>
+          <form method="post" action="/feeds/{{ f.id }}/delete" onsubmit="return confirm('Remove this show?')"><button type="submit" class="small-btn danger">Remove</button></form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Latest in the feed</h2>
+    {% if not preview %}<p class="muted">Nothing yet.</p>{% endif %}
+    <ol class="episodes">
+      {% for e in preview %}
+      <li>
+        <span class="show">{{ e.show_title }}</span>
+        <span class="ep">{{ e.title }}</span>
+        {% if e.published %}<time class="muted small" data-ts="{{ e.published }}"></time>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <form method="post" action="/settings" class="settings">
+      <label>Feed title <input name="title" value="{{ settings.title }}" required></label>
+      <label>Description <input name="description" value="{{ settings.description }}"></label>
+      <label>Cover art URL <input name="image" type="url" value="{{ settings.image }}" placeholder="https://… (square JPG or PNG)"></label>
+      <label>Episodes per show <input name="default_max_episodes" type="number" min="1" value="{{ settings.default_max_episodes }}"></label>
+      <label>Total episodes in feed <input name="max_items" type="number" min="1" value="{{ settings.max_items }}"></label>
+      <label class="check"><input type="checkbox" name="prefix_titles" {% if settings.prefix_titles == "1" %}checked{% endif %}> Put the show name in front of episode titles</label>
+      <button type="submit" class="primary">Save settings</button>
+    </form>
+  </section>
+</main>
+<script>
+  const fmt = new Intl.RelativeTimeFormat(undefined, {numeric: "auto"});
+  const units = [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]];
+  for (const el of document.querySelectorAll("time[data-ts]")) {
+    const ts = parseFloat(el.dataset.ts) * 1000, diff = (ts - Date.now()) / 1000;
+    const [unit, secs] = units.find(([, s]) => Math.abs(diff) >= s) || ["minute", 60];
+    el.textContent = fmt.format(Math.round(diff / secs), unit);
+    el.title = new Date(ts).toLocaleString();
+  }
+  if (location.search.includes("msg=")) history.replaceState(null, "", "/");
+</script>
+</body>
+</html>
