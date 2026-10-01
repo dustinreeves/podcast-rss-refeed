@@ -171,3 +171,27 @@ main.narrow { max-width: 460px; }
 .plain li:first-child { border-top: 0; }
 .user-row form { margin: 0; }
 h3 { margin: 16px 0 0; }
+
+/* player */
+.feed-switch { margin: 0 0 12px; }
+.player { position: sticky; top: 0; z-index: 5; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+.player-now { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.player-now img { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; flex: none; background: var(--border); }
+.player-now strong { display: block; overflow-wrap: anywhere; }
+.player audio { width: 100%; }
+.player-controls { margin-top: 8px; }
+.eplist { list-style: none; margin: 8px 0 0; padding: 0; }
+.ep { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
+.ep:first-child { border-top: 0; }
+.ep-status { width: 1.2em; flex: none; text-align: center; color: var(--accent); padding-top: 2px; }
+.ep-body { min-width: 0; }
+.ep-play {
+  background: none; border: 0; padding: 0; text-align: left; font: inherit; font-weight: 600;
+  color: var(--text); cursor: pointer; white-space: normal;
+}
+.ep-play:hover { color: var(--accent); }
+.ep.current .ep-play { color: var(--accent); }
+.ep.played .ep-play { font-weight: 400; color: var(--muted); }
+.ep.played .ep-status { color: var(--muted); }
+.ep-notes p { margin: 6px 0 0; color: var(--muted); white-space: pre-line; }
+.ep-toggle { flex: none; }

@@ -782,3 +782,108 @@ def test_add_url_with_empty_file_field(client):
     )
     assert resp.status_code == 200 and "Show added." in resp.text
     assert "Couldn't read" not in resp.text
+
+
+# -------------------------------------------------------------------- player
+
+
+def episodes_json(page: str) -> list:
+    import json
+
+    raw = re.search(r'<script type="application/json" id="episodes">(.*?)</script>', page, re.S).group(1)
+    return json.loads(raw)
+
+
+def test_listen_page_streams_from_the_show(client):
+    client.post("/feeds", data={"url": A})
+    col = default_collection(client)
+    page = client.get(f"/listen/{col['id']}").text
+    eps = episodes_json(page)
+    assert len(eps) == 5
+    # Audio URLs are the shows' own enclosure URLs: nothing is proxied or hosted here.
+    assert all(e["url"].startswith("https://cdn.example/Alpha/") for e in eps)
+    assert eps[0]["title"] == "Alpha ep 4" and eps[0]["duration"] == 3600
+    assert client.get("/listen", follow_redirects=False).headers["location"] == f"/listen/{col['id']}"
+
+
+def test_listen_page_paging(client):
+    client.post("/feeds", data={"url": A})
+    col = default_collection(client)
+    page = client.get(f"/listen/{col['id']}?limit=2").text
+    assert len(episodes_json(page)) == 2 and "?limit=102" in page
+
+
+def test_progress_is_saved_per_user(client, app_main):
+    client.post("/feeds", data={"url": A})
+    col = default_collection(client)
+    ep = episodes_json(client.get(f"/listen/{col['id']}").text)[0]
+
+    resp = client.post("/api/progress", json={"episode_id": ep["id"], "position": 754.5, "duration": 3600})
+    assert resp.status_code == 204
+    again = episodes_json(client.get(f"/listen/{col['id']}").text)[0]
+    assert (again["position"], again["played"]) == (754.5, False)
+    assert "◐" not in client.get("/").text  # status icons are drawn client-side
+
+    client.post("/api/progress", json={"episode_id": ep["id"], "position": 0, "played": True})
+    assert episodes_json(client.get(f"/listen/{col['id']}").text)[0]["played"] is True
+
+    # sendBeacon posts a Blob: the body is JSON whatever the content type says.
+    client.post("/api/progress", content=b'{"episode_id": %d, "position": 12}' % ep["id"],
+                headers={"Content-Type": "text/plain"})
+    assert episodes_json(client.get(f"/listen/{col['id']}").text)[0]["position"] == 12
+
+    assert client.post("/api/progress", content=b"nonsense").status_code == 400
+    assert client.post("/api/progress", json={"episode_id": 999999}).status_code == 404
+
+    # Someone else can't read or write this user's episodes or progress.
+    brother = sign_up(app_main.app, invite_link(client), "bro")
+    assert brother.post("/api/progress", json={"episode_id": ep["id"], "position": 1}).status_code == 404
+    assert brother.get(f"/listen/{col['id']}").status_code == 404
+    assert episodes_json(client.get(f"/listen/{col['id']}").text)[0]["position"] == 12
+
+
+def test_progress_rejects_odd_numbers(client):
+    client.post("/feeds", data={"url": A})
+    col = default_collection(client)
+    ep = episodes_json(client.get(f"/listen/{col['id']}").text)[0]
+    client.post("/api/progress", content=b'{"episode_id": %d, "position": -5, "duration": NaN}' % ep["id"])
+    saved = episodes_json(client.get(f"/listen/{col['id']}").text)[0]
+    assert saved["position"] == 0 and saved["duration"] == 3600  # duration from the feed
+
+
+def test_listen_page_escapes_feed_content(client, monkeypatch):
+    nasty = make_feed("Alpha", 1).replace(
+        b"<title>Alpha ep 0</title>",
+        b"<title>&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;</title>"
+        b"<description>&lt;img src=x onerror=alert(2)&gt; Real notes &amp;amp; more</description>",
+    )
+    monkeypatch.setitem(RESPONSES, A, nasty)
+    client.post("/feeds", data={"url": A})
+    col = default_collection(client)
+    page = client.get(f"/listen/{col['id']}").text
+    assert "<script>alert(1)" not in page and "onerror=alert" not in page
+    (ep,) = episodes_json(page)
+    assert ep["title"] == "</script><script>alert(1)</script>"  # intact as data
+    assert "Real notes & more" in ep["notes"] and "<img" not in ep["notes"]
+
+
+def test_deleting_a_show_removes_its_progress(client):
+    client.post("/feeds", data={"url": A})
+    col = default_collection(client)
+    ep = episodes_json(client.get(f"/listen/{col['id']}").text)[0]
+    client.post("/api/progress", json={"episode_id": ep["id"], "position": 30})
+    client.post(f"/feeds/{feed_id(client, A)}/delete")
+    from app import db
+
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM listens").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize(
+    "raw, seconds",
+    [("3723", 3723), ("1:02:03", 3723), ("62:03", 3723), ("00:30", 30), ("", None), ("abc", None), (None, None), ("-5", None)],
+)
+def test_parse_duration(raw, seconds):
+    from app import player
+
+    assert player.parse_duration(raw) == seconds

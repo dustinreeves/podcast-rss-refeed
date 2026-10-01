@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+import json
+import math
 import logging
 import os
 import sqlite3
@@ -14,7 +16,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, builder, cover, db, fetcher, opml
+from . import auth, builder, cover, db, fetcher, opml, player
 from .auth import admin_user, current_user
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -380,6 +382,55 @@ def index(request: Request, msg: str = "", preview: int | None = None, user=Depe
         refreshing=fetcher._refresh_lock.locked(),
         proxy_available=bool(fetcher.FETCH_PROXY),
     )
+
+
+# ---- player
+
+
+@app.get("/listen")
+def listen_first(user=Depends(current_user)):
+    collections = db.list_collections(user["id"])
+    return RedirectResponse(f"/listen/{collections[0]['id']}" if collections else "/", status_code=303)
+
+
+@app.get("/listen/{collection_id}")
+def listen(request: Request, collection_id: int, limit: int = player.PAGE_SIZE, user=Depends(current_user)):
+    collection = owned_collection(user, collection_id)
+    limit = max(1, min(limit, 5000))
+    episodes, more = player.episodes_for(collection, user["id"], limit)
+    return page(
+        request,
+        "listen.html",
+        user,
+        collection=collection,
+        collections=db.list_collections(user["id"]),
+        cover_url=collection["image"] or cover_url(request, collection, absolute=False),
+        episodes=episodes,
+        more=more,
+        next_limit=limit + player.PAGE_SIZE,
+    )
+
+
+@app.post("/api/progress")
+async def save_progress(request: Request, user=Depends(current_user)):
+    """Where the player is in an episode. Sent as JSON, also via navigator.sendBeacon."""
+    try:
+        data = json.loads(await request.body())
+        episode_id = int(data["episode_id"])
+        position = float(data.get("position") or 0)
+        duration = data.get("duration")
+        duration = float(duration) if duration is not None else None
+        played = bool(data.get("played"))
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(400, "Bad progress data")
+    if not math.isfinite(position) or position < 0:
+        position = 0.0
+    if duration is not None and (not math.isfinite(duration) or duration <= 0):
+        duration = None
+    if db.episode_owner(episode_id) != user["id"]:
+        raise HTTPException(404)
+    db.save_listen(user["id"], episode_id, position, duration, played)
+    return Response(status_code=204)
 
 
 # ---- collections (merged feeds)

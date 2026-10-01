@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}{{ collection.title }} · Listen · Refeed{% endblock %}
+{% block subtitle %}<p class="muted">Listening to <strong>{{ collection.title }}</strong></p>{% endblock %}
+{% block content %}
+{% if collections|length > 1 %}
+<nav class="row tight small feed-switch" aria-label="Choose a feed">
+  {% for c in collections %}
+    <a href="/listen/{{ c.id }}" class="chip {% if c.id == collection.id %}on{% endif %}">{{ c.title }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+<section class="card player" aria-label="Player">
+  <div class="player-now">
+    <img id="np-art" src="{{ cover_url }}" alt="" referrerpolicy="no-referrer">
+    <div class="grow">
+      <div class="muted small" id="np-show">{{ collection.title }}</div>
+      <strong id="np-title">Pick an episode below</strong>
+    </div>
+  </div>
+  <audio id="audio" controls preload="none"></audio>
+  <div class="row tight player-controls">
+    <button type="button" id="back15" aria-label="Back 15 seconds">⟲ 15</button>
+    <button type="button" id="fwd30" aria-label="Forward 30 seconds">30 ⟳</button>
+    <button type="button" id="speed" aria-label="Playback speed">1×</button>
+    <button type="button" id="mark">Mark played</button>
+    <button type="button" id="next">Next ⏭</button>
+  </div>
+  <p id="player-error" class="error small" hidden></p>
+</section>
+
+<section class="card">
+  <div class="section-head">
+    <h2>Episodes</h2>
+    <label class="check small"><input type="checkbox" id="hide-played"> Hide played</label>
+  </div>
+  {% if not episodes %}<p class="muted">Nothing in this feed yet. Add some shows to it first.</p>{% endif %}
+  <ol class="eplist" id="eplist">
+    {% for e in episodes %}
+    <li class="ep" data-id="{{ e.id }}">
+      <span class="ep-status" aria-hidden="true"></span>
+      <div class="grow ep-body">
+        <button type="button" class="ep-play" data-play="{{ e.id }}">{{ e.title }}</button>
+        <div class="muted small">
+          {{ e.show }}{% if e.published %} · <time data-ts="{{ e.published }}"></time>{% endif %}<span class="ep-left"></span>
+        </div>
+        {% if e.notes %}<details class="small ep-notes"><summary>Notes</summary><p>{{ e.notes }}</p></details>{% endif %}
+      </div>
+      <button type="button" class="small-btn ep-toggle" data-toggle="{{ e.id }}">Mark played</button>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if more %}
+    <p><a class="button" href="/listen/{{ collection.id }}?limit={{ next_limit }}">Show more</a></p>
+  {% endif %}
+  <p class="muted small">Audio plays straight from each show's own server. Your place in each episode is saved to your account.</p>
+</section>
+
+<script type="application/json" id="episodes">{{ episodes|tojson }}</script>
+<script>
+(() => {
+  const eps = JSON.parse(document.getElementById("episodes").textContent);
+  const byId = new Map(eps.map((e) => [e.id, e]));
+  const $ = (id) => document.getElementById(id);
+  const audio = $("audio"), list = $("eplist"), errorBox = $("player-error");
+  const feedCover = {{ cover_url|tojson }};
+  const lastKey = "refeed.last.{{ collection.id }}";
+  const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.8];
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
+    },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} },
+  };
+
+  // restoring: from loading an episode until it actually plays. Position changes
+  // in between (an interrupted start, a browser resetting to 0) are not real.
+  let current = null, lastSave = 0, pendingSeek = 0, pendingPlay = false, restoring = false;
+  let speed = store.get("refeed.speed", 1);
+  let hidePlayed = store.get("refeed.hidePlayed", false);
+  $("hide-played").checked = hidePlayed;
+
+  const fmt = (sec) => {
+    sec = Math.max(0, Math.round(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    return h ? `${h}h ${m}m` : m ? `${m}m` : `${sec}s`;
+  };
+
+  function save(e = current, { beacon = false } = {}) {
+    if (!e) return;
+    const body = JSON.stringify({
+      episode_id: e.id, position: e.played ? 0 : e.position, duration: e.duration || null, played: e.played,
+    });
+    if (beacon && navigator.sendBeacon) {
+      navigator.sendBeacon("/api/progress", new Blob([body], { type: "application/json" }));
+    } else {
+      fetch("/api/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true })
+        .catch(() => {});
+    }
+  }
+
+  function renderRow(e) {
+    const li = list.querySelector(`li[data-id="${e.id}"]`);
+    if (!li) return;
+    const playing = e === current && !audio.paused;
+    const started = !e.played && e.position > 5;
+    li.querySelector(".ep-status").textContent = playing ? "▶" : e.played ? "✓" : started ? "◐" : "●";
+    li.querySelector(".ep-status").title = playing ? "Playing" : e.played ? "Played" : started ? "In progress" : "New";
+    li.querySelector(".ep-left").textContent =
+      e.played ? "" : started && e.duration ? ` · ${fmt(e.duration - e.position)} left` : e.duration ? ` · ${fmt(e.duration)}` : "";
+    li.querySelector(".ep-toggle").textContent = e.played ? "Mark unplayed" : "Mark played";
+    li.classList.toggle("played", e.played);
+    li.classList.toggle("current", e === current);
+    li.hidden = hidePlayed && e.played && e !== current;
+  }
+  const renderAll = () => eps.forEach(renderRow);
+
+  function nextAfter(e) {
+    const i = eps.indexOf(e);
+    return eps.slice(i + 1).find((x) => !x.played) || null;
+  }
+
+  function load(e, autoplay) {
+    if (current && current !== e) save();
+    current = e;
+    errorBox.hidden = true;
+    $("np-title").textContent = e.title;
+    $("np-show").textContent = e.show;
+    $("np-art").src = e.image || feedCover;
+    $("mark").textContent = e.played ? "Mark unplayed" : "Mark played";
+    const resumable = !e.played && e.position > 5 && (!e.duration || e.position < e.duration - 15);
+    pendingSeek = resumable ? e.position : 0;
+    pendingPlay = autoplay;
+    restoring = true;
+    // Streamed directly from the show's server. "#t=" asks the browser to start
+    // there as it loads; the loadedmetadata handler seeks too, for browsers that don't.
+    audio.src = e.url + (pendingSeek && !e.url.includes("#") ? `#t=${Math.floor(pendingSeek)}` : "");
+    audio.playbackRate = speed;
+    if (autoplay) audio.load();
+    store.set(lastKey, e.id);
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: e.title, artist: e.show, album: {{ collection.title|tojson }},
+        artwork: [{ src: e.image || feedCover, sizes: "512x512" }],
+      });
+    }
+    renderAll();
+  }
+
+  audio.addEventListener("loadedmetadata", () => {
+    if (pendingSeek && Math.abs(audio.currentTime - pendingSeek) > 3) audio.currentTime = pendingSeek;
+    pendingSeek = 0;
+    audio.playbackRate = speed;
+    if (pendingPlay) audio.play().catch(() => {});
+    pendingPlay = false;
+  });
+  audio.addEventListener("playing", () => { restoring = false; });
+  audio.addEventListener("timeupdate", () => {
+    if (!current || restoring || audio.seeking) return;
+    current.position = audio.currentTime;
+    if (Number.isFinite(audio.duration)) current.duration = audio.duration;
+    if (Date.now() - lastSave > 15000) { lastSave = Date.now(); save(); }
+    renderRow(current);
+  });
+  audio.addEventListener("play", renderAll);
+  audio.addEventListener("pause", () => { if (!restoring) save(); renderAll(); });
+  audio.addEventListener("ended", () => {
+    current.played = true;
+    current.position = 0;
+    save();
+    const next = nextAfter(current);
+    if (next) load(next, true); else renderAll();
+  });
+  audio.addEventListener("error", () => {
+    if (!current || !audio.src) return;
+    errorBox.hidden = false;
+    errorBox.textContent = "Couldn't play this episode: the show's server didn't send playable audio. Try again later, or play it in a podcast app.";
+  });
+  addEventListener("pagehide", () => {
+    if (!current) return;
+    if (!restoring && !audio.seeking) current.position = audio.currentTime || current.position;
+    save(current, { beacon: true });
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && current) save(current, { beacon: true });
+  });
+
+  const skip = (s) => { if (current) audio.currentTime = Math.max(0, (audio.currentTime || 0) + s); };
+  $("back15").addEventListener("click", () => skip(-15));
+  $("fwd30").addEventListener("click", () => skip(30));
+  const showSpeed = () => ($("speed").textContent = `${speed}×`);
+  showSpeed();
+  $("speed").addEventListener("click", () => {
+    speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
+    audio.playbackRate = speed;
+    store.set("refeed.speed", speed);
+    showSpeed();
+  });
+  $("mark").addEventListener("click", () => {
+    if (!current) return;
+    current.played = !current.played;
+    if (current.played) { current.position = 0; audio.pause(); }
+    $("mark").textContent = current.played ? "Mark unplayed" : "Mark played";
+    save();
+    renderAll();
+  });
+  $("next").addEventListener("click", () => {
+    const next = current ? nextAfter(current) : eps.find((x) => !x.played);
+    if (next) load(next, true);
+  });
+  $("hide-played").addEventListener("change", (ev) => {
+    hidePlayed = ev.target.checked;
+    store.set("refeed.hidePlayed", hidePlayed);
+    renderAll();
+  });
+
+  list.addEventListener("click", (ev) => {
+    const playBtn = ev.target.closest("[data-play]");
+    const toggleBtn = ev.target.closest("[data-toggle]");
+    if (playBtn) {
+      const e = byId.get(Number(playBtn.dataset.play));
+      if (e === current) { audio.paused ? audio.play().catch(() => {}) : audio.pause(); }
+      else load(e, true);
+    } else if (toggleBtn) {
+      const e = byId.get(Number(toggleBtn.dataset.toggle));
+      e.played = !e.played;
+      if (e.played) e.position = 0;
+      if (e === current) $("mark").textContent = e.played ? "Mark unplayed" : "Mark played";
+      save(e);
+      renderAll();
+    }
+  });
+
+  if ("mediaSession" in navigator) {
+    const ms = navigator.mediaSession;
+    ms.setActionHandler("play", () => audio.play());
+    ms.setActionHandler("pause", () => audio.pause());
+    ms.setActionHandler("seekbackward", () => skip(-15));
+    ms.setActionHandler("seekforward", () => skip(30));
+    ms.setActionHandler("nexttrack", () => $("next").click());
+    try { ms.setActionHandler("seekto", (d) => { audio.currentTime = d.seekTime; }); } catch {}
+  }
+
+  // Load (without playing) whatever you were last in the middle of.
+  const inProgress = eps.filter((e) => !e.played && e.position > 5).sort((a, b) => b.updated - a.updated)[0];
+  const resume = inProgress || byId.get(store.get(lastKey, null));
+  if (resume) load(resume, false); else renderAll();
+})();
+</script>
+{% endblock %}
