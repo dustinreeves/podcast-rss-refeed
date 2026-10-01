@@ -8,8 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DATA_DIR=/data
 
-# A bold font for the generated cover art
-RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
+# curl downloads the feeds (see fetcher.py); a bold font for the generated cover art
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

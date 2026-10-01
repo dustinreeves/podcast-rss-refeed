@@ -5,7 +5,6 @@ import re
 import sqlite3
 import xml.etree.ElementTree as ET
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -77,15 +76,12 @@ def load_app(monkeypatch, tmp_path, admin_password=PASSWORD):
 def mock_fetching(monkeypatch, seen_proxy):
     from app import fetcher
 
-    def handler(request):
-        body = RESPONSES.get(str(request.url))
-        return httpx.Response(200, content=body) if body else httpx.Response(404)
-
-    def fake_client(use_proxy=False):
+    async def fake_get(url, *, use_proxy=False, headers=None, max_bytes=0):
         seen_proxy.append(use_proxy)
-        return httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True)
+        body = RESPONSES.get(url)
+        return fetcher.Fetched(200, body) if body else fetcher.Fetched(404, b"")
 
-    monkeypatch.setattr(fetcher, "_client", fake_client)
+    monkeypatch.setattr(fetcher, "http_get", fake_get)
 
 
 def login(c, username="admin", password=PASSWORD):
@@ -668,3 +664,87 @@ def test_form_post_origin_checks(app_main, headers, allowed):
             follow_redirects=False,
         )
         assert (resp.status_code == 303) is allowed, resp.text
+
+
+# --------------------------------------------------------------- curl fetching
+
+
+@pytest.fixture
+def local_server():
+    """A tiny HTTP server: /feed (ETag + 304), /redirect, /big, /missing."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            seen["user_agent"] = self.headers.get("User-Agent")
+            if self.path.startswith("/redirect"):
+                self.send_response(302)
+                self.send_header("Location", "/feed?token=SECRET")
+                self.end_headers()
+            elif self.path.startswith("/feed"):
+                if self.headers.get("If-None-Match") == '"v1"':
+                    self.send_response(304)
+                    self.end_headers()
+                    return
+                body = RESPONSES[A]
+                self.send_response(200)
+                self.send_header("Content-Type", "application/rss+xml")
+                self.send_header("ETag", '"v1"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path.startswith("/big"):
+                self.send_response(200)
+                self.send_header("Content-Length", str(5_000_000))
+                self.end_headers()
+                self.wfile.write(b"x" * 5_000_000)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}", seen
+    server.shutdown()
+
+
+def test_http_get_with_real_curl(local_server, monkeypatch):
+    import asyncio
+    import shutil
+
+    from app import fetcher
+
+    if not shutil.which(fetcher.CURL):
+        pytest.skip("curl not installed")
+    base, seen = local_server
+    argv = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs):
+        argv.extend(args)
+        return await real_exec(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spy)
+
+    async def run():
+        ok = await fetcher.http_get(f"{base}/redirect?token=SECRET")
+        assert ok.status == 200 and ok.content == RESPONSES[A]
+        assert ok.headers["etag"] == '"v1"' and ok.headers["content-type"] == "application/rss+xml"
+        assert seen["user_agent"] == fetcher.USER_AGENT
+        cached = await fetcher.http_get(f"{base}/feed", headers={"If-None-Match": '"v1"'})
+        assert cached.status == 304
+        assert (await fetcher.http_get(f"{base}/missing")).status == 404
+        with pytest.raises(fetcher.FetchError, match="too large"):
+            await fetcher.http_get(f"{base}/big", max_bytes=1_000_000)
+        with pytest.raises(fetcher.FetchError) as err:
+            await fetcher.http_get("http://127.0.0.1:9/?token=SECRET")
+        assert "SECRET" not in str(err.value)
+
+    asyncio.run(run())
+    assert argv and not any("SECRET" in str(a) for a in argv)  # URLs go via stdin
