@@ -1,3 +1,5 @@
+<p align="center"><img src="app/static/icons/icon-192.png" alt="Refeed mascot" width="120"></p>
+
 # podcast-rss-refeed
 
 Merge your podcasts into **one RSS feed**, or several: an "everything" feed, a "Comedy" feed, a "History" feed. Subscribe to a single link in any podcast app and every show you put in it, public or private (Patreon, Supercast, ...), shows up there, newest first.
