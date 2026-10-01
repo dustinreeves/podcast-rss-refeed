@@ -74,11 +74,23 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 @app.middleware("http")
 async def same_origin_posts(request: Request, call_next):
     # Defence in depth next to SameSite cookies: refuse cross-site form posts.
-    if request.method == "POST":
-        origin = request.headers.get("origin") or request.headers.get("referer")
-        if origin and urlsplit(origin).netloc != request.headers.get("host"):
-            return Response("cross-origin request blocked", status_code=403)
+    if request.method == "POST" and not _same_origin(request):
+        return Response("cross-origin request blocked", status_code=403)
     return await call_next(request)
+
+
+def _same_origin(request: Request) -> bool:
+    # Browsers send Sec-Fetch-Site on every request, whatever the referrer policy.
+    site = request.headers.get("sec-fetch-site")
+    if site:
+        return site in ("same-origin", "none")  # "none": typed URL or bookmark
+    # Older clients: compare Origin/Referer. A "Referrer-Policy: no-referrer" header
+    # (common in reverse-proxy configs) makes browsers send "Origin: null" on form
+    # posts, which says nothing about where the post came from, so it isn't blocked.
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    if not origin or origin == "null":
+        return True
+    return urlsplit(origin).netloc == request.headers.get("host")
 
 
 def base_url(request: Request) -> str:
