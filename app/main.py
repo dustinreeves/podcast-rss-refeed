@@ -27,6 +27,10 @@ REFRESH_MINUTES = float(os.environ.get("REFRESH_MINUTES", "30"))
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
+# Changes whenever the stylesheet does, so browsers don't keep a stale copy.
+templates.env.globals["css_version"] = hashlib.sha256(
+    (HERE / "static" / "style.css").read_bytes()
+).hexdigest()[:10]
 _background: set[asyncio.Task] = set()
 
 

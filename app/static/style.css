@@ -115,7 +115,8 @@ label.check { display: flex; gap: 6px; align-items: center; white-space: nowrap;
 }
 details summary { cursor: pointer; color: var(--muted); margin-top: 4px; }
 .edit, .settings { display: grid; gap: 10px; margin-top: 10px; }
-.edit label, .settings label:not(.check) { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.edit label:not(.check), .settings label:not(.check) { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.edit label.check, .settings label.check { justify-self: start; }
 .edit button, .settings button { justify-self: start; }
 
 .episodes { margin: 0; padding-left: 20px; }
