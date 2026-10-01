@@ -103,6 +103,17 @@ CREATE TABLE IF NOT EXISTS collection_feeds (
     PRIMARY KEY (collection_id, feed_id)
 );
 
+-- Listening progress for the web player. Audio itself is never stored.
+CREATE TABLE IF NOT EXISTS listens (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    episode_id INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+    position   REAL NOT NULL DEFAULT 0,
+    duration   REAL,
+    played     INTEGER NOT NULL DEFAULT 0,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (user_id, episode_id)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -651,6 +662,46 @@ def collection_feeds(collection) -> list[sqlite3.Row]:
             "ORDER BY COALESCE(f.title_override, f.title, f.url) COLLATE NOCASE",
             _collection_params(collection),
         ).fetchall()
+
+
+# --------------------------------------------------------------------- player
+
+
+def episode_owner(episode_id: int) -> int | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT f.user_id FROM episodes e JOIN feeds f ON f.id = e.feed_id WHERE e.id = ?",
+            (episode_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+
+def listens_for(user_id: int, episode_ids: list[int]) -> dict[int, sqlite3.Row]:
+    if not episode_ids:
+        return {}
+    marks = ",".join("?" * len(episode_ids))
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM listens WHERE user_id = ? AND episode_id IN ({marks})",
+            (user_id, *episode_ids),
+        ).fetchall()
+    return {r["episode_id"]: r for r in rows}
+
+
+def save_listen(user_id: int, episode_id: int, position: float, duration: float | None, played: bool):
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO listens (user_id, episode_id, position, duration, played, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, episode_id) DO UPDATE SET
+                position = excluded.position,
+                duration = COALESCE(excluded.duration, listens.duration),
+                played = excluded.played,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, episode_id, position, duration, int(played), time.time()),
+        )
 
 
 def merged_episodes(collection, max_items: int | None = None) -> list[sqlite3.Row]:

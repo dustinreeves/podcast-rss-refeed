@@ -21,6 +21,7 @@
         <div class="row">
           <input id="feed-url-{{ c.id }}" class="grow mono" value="{{ feed_urls[c.id] }}" readonly onclick="this.select()" aria-label="Feed link for {{ c.title }}">
           <button type="button" data-copy="feed-url-{{ c.id }}">Copy</button>
+          <a class="button" href="/listen/{{ c.id }}">▶ Listen</a>
         </div>
         <details>
           <summary class="small">Edit feed</summary>

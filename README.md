@@ -17,6 +17,7 @@ Podcast apps lock your subscriptions inside the app. A single merged feed works 
 - **Accounts for family and friends**: invite people with a one-time link. Everyone gets their own private library of shows and their own feeds; nobody sees anyone else's (handy when each person has their own Patreon feeds).
 - **Multiple merged feeds**: put each show in as many feeds as you like with one click, or let a feed include every show automatically.
 - **Automatic cover art**: each merged feed gets a collage of its shows' artwork with the feed's name in large type, designed to stay readable at podcast-app thumbnail size. It updates itself when shows change, or set your own image instead.
+- **Built-in player**: a Listen page for each feed plays episodes in the browser, streamed straight from each show's own server (nothing is downloaded or re-hosted). It remembers your place in every episode across devices, marks episodes played, plays the next one automatically, and works with phone lock-screen controls.
 - **Web UI**: add shows by URL, import the OPML export from your current podcast app (straight into a feed), export OPML back out, per show or per feed.
 - **Works in any podcast app**: episodes keep their original audio links and GUIDs, each episode carries its own show's artwork, and titles can be prefixed with the show name (`[Show] Episode`).
 - **Per-show control**: cap how many episodes each show contributes, rename shows, pause them.
@@ -141,6 +142,7 @@ The app is FastAPI with Jinja templates and SQLite, in [`app/`](app):
 | `fetcher.py` | Fetches and parses source feeds on a schedule |
 | `builder.py` | Builds the merged RSS XML |
 | `cover.py` | Generates cover art collages with Pillow |
+| `player.py` | Episode data for the web player |
 | `db.py` | SQLite schema and queries |
 | `opml.py` | OPML import and export |
 

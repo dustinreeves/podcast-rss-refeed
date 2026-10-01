@@ -17,6 +17,7 @@
     {% if user %}
     <nav class="account-nav small" aria-label="Account">
       <span class="muted">Signed in as <strong>{{ user.username }}</strong></span>
+      <a href="/listen">Listen</a>
       <a href="/account">Account</a>
       {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
       <form method="post" action="/logout"><button type="submit" class="linklike">Sign out</button></form>
