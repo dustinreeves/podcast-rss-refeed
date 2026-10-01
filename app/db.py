@@ -278,7 +278,13 @@ def delete_feed(feed_id: int):
         conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
 
 
-def upsert_episodes(feed_id: int, episodes: list[dict], keep: int = 500):
+# Episodes kept per show. Generous so a "no limit" feed really has everything the
+# show has published (including episodes that later drop out of its RSS), while
+# still bounding the database if a feed goes haywire.
+KEEP_PER_SHOW = 5000
+
+
+def upsert_episodes(feed_id: int, episodes: list[dict], keep: int = KEEP_PER_SHOW):
     """Store episodes for a feed, keeping only the newest `keep` of them."""
     with connect() as conn:
         conn.executemany(
@@ -317,7 +323,11 @@ def collection_feeds(collection) -> list[sqlite3.Row]:
 
 
 def merged_episodes(collection, default_max: int, max_items: int | None = None) -> list[sqlite3.Row]:
-    """Newest episodes across a collection's enabled shows, capped per show and overall."""
+    """Newest episodes across a collection's enabled shows, capped per show and overall.
+
+    A cap of 0 means no limit, both per show and for the whole feed."""
+    if max_items is None:
+        max_items = collection["max_items"]
     with connect() as conn:
         return conn.execute(
             """
@@ -331,7 +341,7 @@ def merged_episodes(collection, default_max: int, max_items: int | None = None) 
                 WHERE f.enabled = 1 AND (? OR f.id IN
                       (SELECT feed_id FROM collection_feeds WHERE collection_id = ?))
             )
-            WHERE rn <= cap
+            WHERE cap = 0 OR rn <= cap
             ORDER BY published DESC
             LIMIT ?
             """,
@@ -339,6 +349,6 @@ def merged_episodes(collection, default_max: int, max_items: int | None = None) 
                 default_max,
                 collection["all_shows"],
                 collection["id"],
-                max_items if max_items is not None else collection["max_items"],
+                max_items or -1,  # SQLite: LIMIT -1 is no limit
             ),
         ).fetchall()

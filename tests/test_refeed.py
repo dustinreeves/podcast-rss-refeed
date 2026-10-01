@@ -364,3 +364,22 @@ def test_render_layouts(tmp_path, n):
     title = "A Very Long Collection Name That Will Not Fit On One Line At All, Really"
     img = cover.render(title, files)
     assert img.size == (1400, 1400) and img.mode == "RGB"
+
+
+def test_zero_means_no_limit(client):
+    for url in (A, B):  # 5 + 3 episodes
+        client.post("/feeds", data={"url": url})
+    col = default_collection(client)
+    client.post("/settings", data={"default_max_episodes": "1"})
+    assert len(titles(feed_xml(client)[1])) == 2  # one per show
+
+    client.post(f"/feeds/{feed_id(client, A)}/update", data={"max_episodes": "0", "enabled": "on"})
+    assert len(titles(feed_xml(client)[1])) == 5 + 1  # Alpha unlimited, Bravo default
+    assert 'value="0"' in client.get("/").text  # a 0 override shows as 0, not blank
+
+    client.post("/settings", data={"default_max_episodes": "0"})
+    client.post(
+        f"/collections/{col['id']}/update",
+        data={"title": "All", "max_items": "0", "all_shows": "on", "prefix_titles": "on"},
+    )
+    assert len(titles(feed_xml(client)[1])) == 8  # everything

@@ -69,7 +69,7 @@ Environment variables (see [`.env.example`](.env.example)):
 | `DATA_DIR` | `/data` | Where the database, cached artwork and covers live (the `refeed-data` volume) |
 | `COVER_FONT` | DejaVu Sans Bold | Path to a `.ttf` font for the generated cover titles |
 
-Each feed's title, description, cover art and episode limit, plus the default episodes per show, are set in the web UI.
+Each feed's title, description, cover art and episode limit, plus the default episodes per show, are set in the web UI. Any episode limit can be `0` for no limit: a feed then carries every episode its shows have published (up to the newest 5,000 per show).
 
 ### Fetching some feeds through a VPN
 
